@@ -276,10 +276,74 @@ async function applyBump(exId) {
   await commit(exId);
 }
 
+// ---- Reorder: within the day; crossing a divider hops into the adjacent group ----
+function findSlot(exId) {
+  for (const day of P.days) {
+    for (let gi = 0; gi < day.groups.length; gi++) {
+      const pi = day.groups[gi].indexOf(exId);
+      if (pi !== -1) return { day, gi, pi };
+    }
+  }
+  return null;
+}
+
+async function moveEx(exId, dir) {
+  const s = findSlot(exId);
+  if (!s) return;
+  const g = s.day.groups[s.gi];
+  const ni = s.pi + dir;
+  if (ni >= 0 && ni < g.length) {
+    [g[s.pi], g[ni]] = [g[ni], g[s.pi]];
+  } else {
+    const tg = s.day.groups[s.gi + dir];
+    if (!tg) return; // already at the very top or bottom of the day
+    g.splice(s.pi, 1);
+    if (dir === -1) tg.push(exId); else tg.unshift(exId);
+    if (!g.length) s.day.groups.splice(s.gi, 1); // a divider with nothing left in it disappears
+  }
+  await kvSet('program', P);
+  render();
+  syncMoveButtons(exId);
+}
+
+function syncMoveButtons(exId) {
+  const s = findSlot(exId);
+  const last = s && s.day.groups.length - 1;
+  $('actUp').disabled = !s || (s.gi === 0 && s.pi === 0);
+  $('actDown').disabled = !s || (s.gi === last && s.pi === s.day.groups[last].length - 1);
+}
+
+// Removing an exercise takes its history with it — confirm spells that out.
+async function removeEx(exId) {
+  const ex = P.exercises[exId];
+  const s = findSlot(exId);
+  if (!ex || !s) return;
+  const doomed = HIST.filter(h => h.exId === exId);
+  const msg = `Remove "${ex.name}" from ${s.day.name}?` +
+    (doomed.length ? `\n\nIts ${doomed.length} history entr${doomed.length === 1 ? 'y' : 'ies'} will be deleted too.` : '');
+  if (!confirm(msg)) return;
+  s.day.groups[s.gi].splice(s.pi, 1);
+  if (!s.day.groups[s.gi].length) s.day.groups.splice(s.gi, 1);
+  delete P.exercises[exId];
+  HIST = HIST.filter(h => h.exId !== exId);
+  for (const h of doomed) await tx('history', 'readwrite', st => st.delete(h.id));
+  delete DONE.map[exId];
+  for (const k of Object.keys(CHECKLOG)) {
+    CHECKLOG[k] = CHECKLOG[k].filter(e => e !== exId);
+    if (!CHECKLOG[k].length) delete CHECKLOG[k];
+  }
+  editedToday.delete(exId);
+  await kvSet('program', P);
+  await kvSet('done', DONE);
+  await kvSet('checklog', CHECKLOG);
+  render();
+}
+
 function openActions(exId) {
   actCtx = exId;
   const ex = P.exercises[exId];
   $('actTitle').textContent = ex.name;
+  syncMoveButtons(exId);
   $('actDone').textContent = DONE.map[exId] ? '↩ Un-complete' : '✓ Mark complete';
   const plan = bumpPlan(ex);
   $('actBump').style.display = plan ? '' : 'none';
@@ -622,6 +686,9 @@ $('closeHist').onclick = () => $('histOverlay').classList.add('hidden');
 $('editOverlay').onclick = e => { if (e.target === $('editOverlay') && Date.now() - editOpenedAt > 400) closeEdit(); };
 $('actDone').onclick = async () => { const id = actCtx; closeActions(); await toggleDoneEx(id); };
 $('actBump').onclick = async () => { const id = actCtx; closeActions(); await applyBump(id); };
+$('actUp').onclick = () => moveEx(actCtx, -1);   // sheet stays open for repeated taps
+$('actDown').onclick = () => moveEx(actCtx, +1);
+$('actRemove').onclick = async () => { const id = actCtx; closeActions(); await removeEx(id); };
 $('actCancel').onclick = closeActions;
 $('actOverlay').onclick = e => { if (e.target === $('actOverlay') && Date.now() - actOpenedAt > 400) closeActions(); };
 $('histOverlay').onclick = e => { if (e.target === $('histOverlay')) $('histOverlay').classList.add('hidden'); };

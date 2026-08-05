@@ -193,6 +193,11 @@ button.danger {
 }
 .actbtn.gold { color: var(--gold); border-color: var(--gold-dim); }
 .actbtn:active { background: var(--gold-dim); }
+.actbtn:disabled { opacity: 0.35; }
+
+.moverow { display: flex; gap: 10px; }
+.moverow .actbtn { flex: 1; text-align: center; }
+.actbtn.red { color: var(--danger); border-color: rgba(229, 83, 61, 0.45); }
 
 .danger-row { justify-content: center; margin-top: 18px; border-top: 1px solid var(--line); padding-top: 14px; }
 
