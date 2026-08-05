@@ -17,7 +17,14 @@
 <header class="topbar">
   <div class="titlerow">
     <h1>Jim</h1>
-    <button id="dataBtn" class="databtn" aria-label="Backup and data">•••</button>
+    <div class="hbtns">
+      <button id="calBtn" class="databtn" aria-label="Calendar">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8.5 3v4M15.5 3v4"/>
+        </svg>
+      </button>
+      <button id="dataBtn" class="databtn" aria-label="Backup and data">•••</button>
+    </div>
   </div>
   <p class="coach hidden" id="coach"></p>
   <button id="banner" class="banner hidden"></button>
@@ -72,6 +79,24 @@
     </div>
     <p class="raw" id="histRaw"></p>
     <div id="histList"></div>
+  </div>
+</div>
+
+<!-- calendar -->
+<div class="overlay hidden" id="calOverlay">
+  <div class="sheet">
+    <div class="sheethead">
+      <div class="monthnav">
+        <button id="calPrev" class="ghost navbtn">‹</button>
+        <h2 id="calTitle"></h2>
+        <button id="calNext" class="ghost navbtn">›</button>
+      </div>
+      <button id="closeCal" class="ghost">Done</button>
+    </div>
+    <p class="raw" id="calWeek"></p>
+    <div class="dowrow" id="calDow"></div>
+    <div class="calgrid" id="calGrid"></div>
+    <div id="calDetail"></div>
   </div>
 </div>
 

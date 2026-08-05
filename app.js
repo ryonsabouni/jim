@@ -8,6 +8,30 @@ const DEFAULT_REPS = 10;
 // not in this public source.
 const EMPTY_PROGRAM = { title: 'Jim', coachNotes: [], days: [], exercises: {} };
 
+// One colour per training day, assigned by position (cycles past five).
+const PALETTE = ['#e5b83d', '#4cc9c0', '#a78bfa', '#7ec96a', '#f0776c'];
+
+// Anatomical glyphs for the classic day ids; days with other ids just get no icon.
+const DAY_ICONS = {
+  chest: '<path d="M11.4 7.6C8.6 7.8 6 8.2 4.6 8.8Q3.5 9.3 3.7 10.6L3.9 11.9Q4.1 13.1 5.6 12.9C7.6 12.7 9.6 12.4 11.4 12.2Z"/>' +
+         '<path d="M12.6 7.6C15.4 7.8 18 8.2 19.4 8.8Q20.5 9.3 20.3 10.6L20.1 11.9Q19.9 13.1 18.4 12.9C16.4 12.7 14.4 12.4 12.6 12.2Z"/>',
+  back: '<path d="M5.5 5.5C6 12 8 15.2 10.6 18.5V6.8Z"/><path d="M18.5 5.5C18 12 16 15.2 13.4 18.5V6.8Z"/>',
+  shoulders: '<path d="M11.65 6.2a5.8 5.8 0 0 0 0 11.6Z"/><path d="M12.35 6.2a5.8 5.8 0 0 1 0 11.6Z"/>',
+  legs: '<path d="M6.4 4.6h4.4l-1.1 14.8H7.5Z"/><path d="M17.6 4.6h-4.4l1.1 14.8h2.2Z"/>',
+  abs: '<rect x="7.5" y="5" width="3.6" height="3.6" rx="1.1"/><rect x="12.9" y="5" width="3.6" height="3.6" rx="1.1"/>' +
+       '<rect x="7.5" y="10.2" width="3.6" height="3.6" rx="1.1"/><rect x="12.9" y="10.2" width="3.6" height="3.6" rx="1.1"/>' +
+       '<rect x="7.5" y="15.4" width="3.6" height="3.6" rx="1.1"/><rect x="12.9" y="15.4" width="3.6" height="3.6" rx="1.1"/>',
+};
+
+const dayIndex = dayId => P.days.findIndex(d => d.id === dayId);
+const dayColor = dayId => PALETTE[Math.max(0, dayIndex(dayId)) % PALETTE.length];
+const dayLetter = dayId => (P.days[dayIndex(dayId)]?.name.trim()[0] || '?').toUpperCase();
+function dayIconSvg(dayId, px) {
+  const paths = DAY_ICONS[dayId];
+  if (!paths) return '';
+  return `<svg viewBox="0 0 24 24" width="${px}" height="${px}" fill="${dayColor(dayId)}" stroke="none">${paths}</svg>`;
+}
+
 // ---- IndexedDB ----
 let db;
 function openDB() {
@@ -118,8 +142,10 @@ function render() {
   if (!P.days.some(d => d.id === activeDay)) activeDay = P.days[0].id;
   for (const d of P.days) {
     const b = document.createElement('button');
-    b.textContent = d.name;
-    b.className = d.id === activeDay ? 'active' : '';
+    const icon = dayIconSvg(d.id, 17);
+    b.innerHTML = `${icon}<span>${d.name}</span>`;
+    b.className = (icon ? 'tabicon' : '') + (d.id === activeDay ? ' active' : '');
+    if (d.id === activeDay) b.style.setProperty('--daycolor', dayColor(d.id));
     b.onclick = () => { activeDay = d.id; kvSet('lastDay', activeDay); render(); };
     tabs.appendChild(b);
   }
@@ -636,6 +662,103 @@ async function restoreFromText(text) {
   }
 }
 
+// ---- Calendar ----
+let calY = 0, calM = 0, calSelected = null;
+
+// dateKey -> { dayId -> { edited: [exId], checked: [exId] } }, from real activity only
+// (weight edits and check-offs; seed snapshots don't count as training).
+function activityByDate() {
+  const exDay = {};
+  for (const d of P.days) for (const g of d.groups) for (const id of g) exDay[id] = d.id;
+  const map = {};
+  const add = (key, exId, kind) => {
+    const dayId = exDay[exId];
+    if (!dayId) return; // exercise since removed
+    const types = (map[key] = map[key] || {});
+    const t = (types[dayId] = types[dayId] || { edited: [], checked: [] });
+    if (!t[kind].includes(exId)) t[kind].push(exId);
+  };
+  for (const h of HIST) if (h.label === 'edit') add(todayKey(h.ts), h.exId, 'edited');
+  for (const [key, ids] of Object.entries(CHECKLOG)) for (const id of ids) add(key, id, 'checked');
+  return map;
+}
+
+function calChip(dayId) {
+  const c = dayColor(dayId);
+  return `<span class="cmk" style="background:${c}2e;box-shadow:inset 0 0 0 1px ${c}8c;color:${c}">${dayLetter(dayId)}</span>`;
+}
+
+function openCal() {
+  const n = new Date();
+  calY = n.getFullYear();
+  calM = n.getMonth();
+  calSelected = todayKey(Date.now());
+  renderCal();
+  $('calOverlay').classList.remove('hidden');
+}
+
+function renderCal() {
+  const activity = activityByDate();
+  $('calTitle').textContent = new Date(calY, calM, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+
+  // "this week" = the calendar week containing today, regardless of the viewed month
+  const now = new Date();
+  const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
+  let weekN = 0;
+  for (let i = 0; i < 7; i++) {
+    const k = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + i).toDateString();
+    if (activity[k]) weekN++;
+  }
+  $('calWeek').textContent = `this week: ${weekN} workout${weekN === 1 ? '' : 's'}`;
+
+  $('calDow').innerHTML = ['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(d => `<span>${d}</span>`).join('');
+
+  const first = new Date(calY, calM, 1).getDay();
+  const days = new Date(calY, calM + 1, 0).getDate();
+  const today = todayKey(Date.now());
+  let grid = '';
+  for (let i = 0; i < first; i++) grid += '<div class="ccell"></div>';
+  for (let d = 1; d <= days; d++) {
+    const key = new Date(calY, calM, d).toDateString();
+    const has = activity[key];
+    const cls = 'ccell' + (has ? ' has' : '') + (key === today ? ' today' : '') + (key === calSelected ? ' sel' : '');
+    const marks = has ? P.days.filter(dd => has[dd.id]).map(dd => calChip(dd.id)).join('') : '';
+    grid += `<div class="${cls}" data-key="${key}"><div class="cnum">${d}</div><div class="cmarks">${marks}</div></div>`;
+  }
+  $('calGrid').innerHTML = grid;
+
+  // detail for the selected date
+  const det = $('calDetail');
+  const sel = calSelected && activity[calSelected];
+  if (!sel) {
+    det.innerHTML = calSelected ? `<p class="raw">${fmtDate(new Date(calSelected).getTime())} — nothing logged.</p>` : '';
+    return;
+  }
+  let html = `<p class="raw">${fmtDate(new Date(calSelected).getTime())}</p>`;
+  for (const day of P.days) {
+    const t = sel[day.id];
+    if (!t) continue;
+    html += `<div class="cday"><div class="cdayhead" style="color:${dayColor(day.id)}">` +
+            `${dayIconSvg(day.id, 16) || calChip(day.id)}<span>${day.name}</span></div>`;
+    const seen = new Set();
+    for (const exId of t.edited) {
+      if (!P.exercises[exId] || seen.has(exId)) continue;
+      seen.add(exId);
+      const h = HIST.find(x => x.exId === exId && x.label === 'edit' && todayKey(x.ts) === calSelected);
+      const sets = h && h.sets.length ? h.sets.map(chipText).join(', ') : '—';
+      const check = t.checked.includes(exId) ? '✓ ' : '';
+      html += `<div class="cline">${check}${P.exercises[exId].name} — ${sets}</div>`;
+    }
+    for (const exId of t.checked) {
+      if (!P.exercises[exId] || seen.has(exId)) continue;
+      seen.add(exId);
+      html += `<div class="cline">✓ ${P.exercises[exId].name}</div>`;
+    }
+    html += '</div>';
+  }
+  det.innerHTML = html;
+}
+
 // ---- Staleness banner ----
 let bannerDismissed = false;
 let lastBackupAt = 0;
@@ -699,6 +822,15 @@ $('eraseAll').onclick = async () => {
 };
 
 $('dataBtn').onclick = openData;
+$('calBtn').onclick = openCal;
+$('closeCal').onclick = () => $('calOverlay').classList.add('hidden');
+$('calOverlay').onclick = e => { if (e.target === $('calOverlay')) $('calOverlay').classList.add('hidden'); };
+$('calPrev').onclick = () => { calM--; if (calM < 0) { calM = 11; calY--; } renderCal(); };
+$('calNext').onclick = () => { calM++; if (calM > 11) { calM = 0; calY++; } renderCal(); };
+$('calGrid').onclick = e => {
+  const c = e.target.closest('.ccell');
+  if (c && c.dataset.key) { calSelected = c.dataset.key; renderCal(); }
+};
 $('closeData').onclick = closeData;
 $('dataOverlay').onclick = e => { if (e.target === $('dataOverlay')) closeData(); };
 $('banner').onclick = () => { bannerDismissed = true; updateBanner(); openData(); };

@@ -69,21 +69,31 @@ body {
 .tabs button {
   flex: 1 1 auto;
   min-width: 0;
-  padding-left: 8px;
-  padding-right: 8px;
   background: var(--card);
   color: var(--dim);
   border: 1px solid var(--line);
   border-radius: 10px;
-  padding: 9px 0;
+  padding: 7px 4px 6px;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
 }
-.tabs button.active { background: var(--gold); border-color: var(--gold); color: #141414; }
+.tabs button svg { opacity: 0.55; }
+.tabs button span { font-size: 10.5px; letter-spacing: 0.2px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.tabs button.active {
+  background: var(--card2);
+  border-color: var(--daycolor, var(--gold));
+  color: var(--daycolor, var(--gold));
+}
+.tabs button.active svg { opacity: 1; }
+.tabs button:not(.tabicon) { justify-content: center; min-height: 44px; }
 
 main { padding: 10px 12px 0; }
 
@@ -229,3 +239,32 @@ button.danger {
 .histdate .label { color: var(--gold-dim); }
 .histentry .chips { margin-top: 0; }
 .histentry .chip { cursor: default; padding: 5px 9px; font-size: 14px; }
+
+.hbtns { display: flex; gap: 6px; align-items: center; }
+.databtn svg { display: block; }
+
+.monthnav { display: flex; align-items: center; gap: 2px; }
+.monthnav h2 { min-width: 150px; text-align: center; }
+.navbtn { font-size: 22px; padding: 0 10px; line-height: 1; }
+
+.dowrow { display: grid; grid-template-columns: repeat(7, 1fr); margin-top: 10px; }
+.dowrow span { text-align: center; font-size: 9px; color: var(--dim); font-weight: 700; padding-bottom: 4px; }
+
+.calgrid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; }
+.ccell { min-height: 44px; border-radius: 8px; padding: 3px 0 2px; text-align: center; cursor: pointer; }
+.ccell.today { box-shadow: inset 0 0 0 1px var(--gold); }
+.ccell.sel { background: var(--card2); }
+.cnum { font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; line-height: 1.3; }
+.ccell.has .cnum { color: var(--text); font-weight: 600; }
+.cmarks { display: flex; justify-content: center; flex-wrap: wrap; gap: 2px; margin-top: 3px; min-height: 13px; }
+.cmk {
+  width: 13px; height: 13px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 8px; font-weight: 800; line-height: 1;
+}
+
+#calDetail { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 4px; }
+.cday { margin-top: 10px; }
+.cdayhead { display: flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 700; }
+.cdayhead svg { display: block; }
+.cline { color: var(--dim); font-size: 13px; margin: 5px 0 0 22px; font-variant-numeric: tabular-nums; }
