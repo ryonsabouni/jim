@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0b0d">
+<title>Jim</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Jim">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="titlerow">
+    <h1>Jim</h1>
+    <button id="dataBtn" class="databtn" aria-label="Backup and data">•••</button>
+  </div>
+  <p class="coach hidden" id="coach"></p>
+  <button id="banner" class="banner hidden"></button>
+  <nav class="tabs" id="tabs"></nav>
+</header>
+
+<main id="day"></main>
+
+<!-- set editor -->
+<div class="overlay hidden" id="editOverlay">
+  <div class="modal">
+    <h2 id="editTitle">Edit set</h2>
+    <div class="fields">
+      <label>Weight <input id="fW" type="number" inputmode="decimal" step="2.5" placeholder="—"></label>
+      <label>Reps <input id="fR" type="number" inputmode="numeric" step="1" placeholder="implied"></label>
+      <label>Seconds <input id="fS" type="number" inputmode="numeric" step="5" placeholder="—"></label>
+      <label>Drop to <input id="fD" type="number" inputmode="decimal" step="2.5" placeholder="—"></label>
+    </div>
+    <p class="hint">Leave reps blank for your usual target. Fill seconds for timed sets, drop-to for burnouts.</p>
+    <div class="row">
+      <button id="delSet" class="danger">Delete set</button>
+      <span class="spacer"></span>
+      <button id="cancelEdit" class="ghost">Cancel</button>
+      <button id="saveEdit" class="primary">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- long-press action sheet -->
+<div class="overlay hidden" id="actOverlay">
+  <div class="modal">
+    <h2 id="actTitle"></h2>
+    <div class="actions">
+      <button id="actDone" class="actbtn"></button>
+      <button id="actBump" class="actbtn gold"></button>
+    </div>
+    <div class="row"><span class="spacer"></span><button id="actCancel" class="ghost">Cancel</button></div>
+  </div>
+</div>
+
+<!-- history sheet -->
+<div class="overlay hidden" id="histOverlay">
+  <div class="sheet">
+    <div class="sheethead">
+      <h2 id="histTitle">History</h2>
+      <button id="closeHist" class="ghost">Done</button>
+    </div>
+    <p class="raw" id="histRaw"></p>
+    <div id="histList"></div>
+  </div>
+</div>
+
+<!-- data / backup sheet -->
+<div class="overlay hidden" id="dataOverlay">
+  <div class="sheet">
+    <div class="sheethead">
+      <h2>Data</h2>
+      <button id="closeData" class="ghost">Done</button>
+    </div>
+    <p class="raw" id="backupState"></p>
+    <div class="actions">
+      <button id="doBackup" class="actbtn gold">Back up — dated JSON</button>
+      <button id="doNote" class="actbtn">Export in note format</button>
+      <button id="doImportFile" class="actbtn">Restore from a file…</button>
+      <button id="doImportPaste" class="actbtn">Restore from pasted text…</button>
+    </div>
+    <p class="hint">Back up sends a dated file to the share sheet — add it to your shared note as a
+      new attachment each time, so old backups stay recoverable.</p>
+    <div class="hidden" id="pasteWrap">
+      <textarea id="pasteBox" placeholder="Paste backup JSON here"></textarea>
+      <div class="row">
+        <span class="spacer"></span>
+        <button id="pasteCancel" class="ghost">Cancel</button>
+        <button id="pasteGo" class="primary">Restore</button>
+      </div>
+    </div>
+    <input type="file" id="fileInput" accept="application/json,.json,text/plain" hidden>
+    <div class="row danger-row">
+      <button id="eraseAll" class="danger">Erase all data…</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
