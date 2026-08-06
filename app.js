@@ -8,6 +8,70 @@ const DEFAULT_REPS = 10;
 // not in this public source.
 const EMPTY_PROGRAM = { title: 'Jim', coachNotes: [], days: [], exercises: {} };
 
+// ?demo runs the whole app against a separate database seeded with invented data —
+// a sandbox for the curious (and for README screenshots). Real data is untouched.
+const PARAMS = new URLSearchParams(location.search);
+const DEMO = PARAMS.has('demo');
+
+const DEMO_PROGRAM = {
+  title: 'Jim',
+  coachNotes: ['Demo data — poke anything'],
+  days: [
+    { id: 'chest', name: 'Chest', groups: [['d1', 'd2', 'd3'], ['d4', 'd5']] },
+    { id: 'back', name: 'Back', groups: [['d6', 'd7', 'd8'], ['d9', 'd10']] },
+    { id: 'legs', name: 'Legs', groups: [['d11', 'd12', 'd13'], ['d14', 'd15']] },
+  ],
+  exercises: {
+    d1: { name: 'Bench', sets: [{ w: 135 }, { w: 155 }, { w: 175, reps: 8 }], rawLine: 'Bench 135, 155, 175(8)' },
+    d2: { name: 'Incline DB press', sets: [{ w: 50 }, { w: 60 }, { w: 65, reps: 9 }], rawLine: 'Incline DB press 50, 60, 65(9)' },
+    d3: { name: 'Dips', sets: [{ add: 25, reps: 10 }, { add: 45, reps: 8 }], rawLine: 'Dips +25x10, +45x8' },
+    d4: { name: 'Overhead press', sets: [{ w: 95 }, { w: 105 }, { w: 115, reps: 6 }], rawLine: 'Overhead press 95, 105, 115(6)' },
+    d5: { name: 'Pushdown burnout', sets: [{ w: 70, drop: 30 }], rawLine: 'Pushdown burnout 70→30' },
+    d6: { name: 'Pull ups', bodyweight: true, sets: [{ bw: 1, reps: 8 }, { bw: 1, reps: 8 }, { add: 25, reps: 6 }], rawLine: 'Pull ups 8, 8, +25x6' },
+    d7: { name: 'Barbell row', sets: [{ w: 135 }, { w: 155 }, { w: 155, reps: 8 }], rawLine: 'Barbell row 135, 155, 155(8)' },
+    d8: { name: 'Pulldown', sets: [{ w: 140 }, { w: 160 }, { w: 160 }], rawLine: 'Pulldown 140, 160, 160' },
+    d9: { name: 'Curls', sets: [{ w: 25 }, { w: 30 }, { w: 30, reps: 8 }], rawLine: 'Curls 25, 30, 30(8)' },
+    d10: { name: 'Dead hangs', bodyweight: true, sets: [{ sec: 45 }], rawLine: 'Dead hangs 45s' },
+    d11: { name: 'Squats', sets: [{ w: 185 }, { w: 205 }, { w: 225, reps: 6 }], rawLine: 'Squats 185, 205, 225(6)' },
+    d12: { name: 'RDL', sets: [{ w: 135 }, { w: 155 }, { w: 165 }], rawLine: 'RDL 135, 155, 165' },
+    d13: { name: 'Split squats', sets: [{ w: 40 }, { w: 50 }, { w: 50, reps: 7 }], rawLine: 'Split squats 40, 50, 50(7)' },
+    d14: { name: 'Calf raises', sets: [{ w: 90 }, { w: 110 }, { w: 110 }], rawLine: 'Calf raises 90, 110, 110' },
+    d15: { name: 'Plank', bodyweight: true, sets: [{ sec: 60 }, { sec: 60 }], rawLine: 'Plank 60s, 60s' },
+  },
+};
+
+// Fabricate a few weeks of believable history so the demo shows last-lines,
+// hit-target hints, and a lived-in calendar.
+async function seedDemo() {
+  const dayAgo = n => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate() - n).getTime() + 36e5 * 10; };
+  const lighter = (s, k) => {
+    const c = clone(s);
+    if (c.w != null && c.w > 50) c.w -= 5 * k; else if (c.w != null) c.w -= 2.5 * k;
+    if (c.add != null && k > 0) c.add = Math.max(0, c.add - 5 * k);
+    return c;
+  };
+  const sessions = [[16, 0], [14, 1], [12, 2], [9, 0], [7, 1], [5, 2], [2, 0]]; // [days ago, day index]
+  for (const [ago, di] of sessions) {
+    const k = ago >= 12 ? 2 : ago >= 5 ? 1 : 0;
+    for (const g of DEMO_PROGRAM.days[di].groups) {
+      for (const exId of g) {
+        const ex = DEMO_PROGRAM.exercises[exId];
+        if (!ex.sets.length) continue;
+        const e = { exId, ts: dayAgo(ago), sets: ex.sets.map(s => lighter(s, k)), label: 'edit' };
+        e.id = await histAdd(e);
+        HIST.push(e);
+      }
+      for (const exId of g) await logCheckAt(exId, new Date(dayAgo(ago)).toDateString());
+    }
+  }
+  await kvSet('checklog', CHECKLOG);
+}
+
+async function logCheckAt(exId, key) {
+  const arr = CHECKLOG[key] || (CHECKLOG[key] = []);
+  if (!arr.includes(exId)) arr.push(exId);
+}
+
 // One colour per training day, assigned by position (cycles past five).
 const PALETTE = ['#e5b83d', '#4cc9c0', '#a78bfa', '#7ec96a', '#f0776c'];
 
@@ -36,7 +100,7 @@ function dayIconSvg(dayId, px) {
 let db;
 function openDB() {
   return new Promise((res, rej) => {
-    const q = indexedDB.open('jim', 1);
+    const q = indexedDB.open(DEMO ? 'jim-demo' : 'jim', 1);
     q.onupgradeneeded = e => {
       const d = e.target.result;
       d.createObjectStore('kv');
@@ -79,8 +143,9 @@ async function init() {
   db = await openDB();
   P = await kvGet('program');
   if (!P) {
-    P = clone(EMPTY_PROGRAM);
+    P = clone(DEMO ? DEMO_PROGRAM : EMPTY_PROGRAM);
     await kvSet('program', P);
+    if (DEMO) { HIST = []; CHECKLOG = {}; await seedDemo(); }
   }
   activeDay = (await kvGet('lastDay')) || (P.days[0] && P.days[0].id);
   HIST = await histAll();
@@ -94,6 +159,7 @@ async function init() {
   lastBackupAt = (await kvGet('lastBackupAt')) || 0;
   render();
   updateBanner();
+  if (PARAMS.get('view') === 'cal') openCal();
 }
 
 // ---- Rendering ----
@@ -158,6 +224,11 @@ function render() {
     for (const exId of group) g.appendChild(renderEx(exId));
     main.appendChild(g);
   }
+  const addBtn = document.createElement('button');
+  addBtn.className = 'addex';
+  addBtn.textContent = '＋ Add exercise';
+  addBtn.onclick = () => { $('addLine').value = ''; $('addOverlay').classList.remove('hidden'); $('addLine').focus(); };
+  main.appendChild(addBtn);
 }
 
 // First-run screen: no program yet, so the only meaningful actions are the restores.
@@ -172,6 +243,7 @@ function renderSetup() {
     <div class="actions">
       <button class="actbtn gold" id="setupFile">Restore from a file…</button>
       <button class="actbtn" id="setupPaste">Restore from pasted text…</button>
+      <button class="actbtn" id="setupFresh">Start from scratch</button>
     </div>`;
   main.appendChild(card);
   $('setupFile').onclick = () => $('fileInput').click();
@@ -179,6 +251,12 @@ function renderSetup() {
     openData();
     $('pasteWrap').classList.remove('hidden');
     $('pasteBox').focus();
+  };
+  $('setupFresh').onclick = async () => {
+    P.days.push({ id: 'day1', name: 'Workout', groups: [] });
+    activeDay = 'day1';
+    await kvSet('program', P);
+    render();
   };
 }
 
@@ -237,6 +315,78 @@ function renderEx(exId) {
   card.appendChild(chips);
   attachCardGestures(card, exId);
   return card;
+}
+
+// ---- Add exercise: one line in the note notation ----
+// "Bench 60, 65, 70(8)" · "+45x8" added weight · "45s" timed · "70→30" drop · "(text)" note.
+// Name = everything before the first numeric token; no numeric tail = untracked exercise.
+function parseLine(line) {
+  let note = null;
+  line = line.trim().replace(/\(([^)0-9][^)]*)\)/g, (_, t) => { note = t.trim(); return ' '; });
+  const words = line.split(/\s+/).filter(Boolean);
+  let split = words.length;
+  for (let i = 1; i < words.length; i++) {
+    if (/^[+~]?\d/.test(words[i])) { split = i; break; }
+  }
+  const name = words.slice(0, split).join(' ');
+  if (!name) return null;
+  const sets = [];
+  const tail = words.slice(split).join(' ');
+  for (let tok of tail.split(',').map(t => t.trim()).filter(Boolean)) {
+    let m;
+    if ((m = tok.match(/^(\d+(?:\.\d+)?)s$/))) sets.push({ sec: +m[1] });
+    else if ((m = tok.match(/^\+(\d+(?:\.\d+)?)x(\d+)$/i))) sets.push({ add: +m[1], reps: +m[2] });
+    else if ((m = tok.match(/^\+(\d+(?:\.\d+)?)$/))) sets.push({ add: +m[1] });
+    else if ((m = tok.match(/^(\d+(?:\.\d+)?)x(\d+)$/i))) sets.push({ w: +m[1], reps: +m[2] });
+    else if ((m = tok.match(/^(\d+(?:\.\d+)?)\((\d+)\)$/))) sets.push({ w: +m[1], reps: +m[2] });
+    else if ((m = tok.match(/^(\d+(?:\.\d+)?)(?:→|->)(\d+(?:\.\d+)?)$/))) sets.push({ w: +m[1], drop: +m[2] });
+    else if ((m = tok.match(/^(\d+(?:\.\d+)?)$/))) sets.push({ w: +m[1] });
+    else if (/^bw$/i.test(tok)) sets.push({ bw: 1 });
+    else note = note ? `${note} · ${tok}` : tok;
+  }
+  const ex = { name, sets, rawLine: line.trim() };
+  if (note) ex.note = note;
+  if (!sets.length || sets.every(s => s.bw || s.sec != null)) ex.bodyweight = true;
+  return ex;
+}
+
+async function addExercise(line) {
+  const ex = parseLine(line);
+  if (!ex) { toast('Give it at least a name.'); return false; }
+  const day = P.days.find(d => d.id === activeDay);
+  if (!day) return false;
+  const exId = 'x' + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36);
+  P.exercises[exId] = ex;
+  if (!day.groups.length) day.groups.push([]);
+  day.groups[day.groups.length - 1].push(exId);
+  await kvSet('program', P);
+  if (ex.sets.length) {
+    const e = { exId, ts: Date.now(), sets: clone(ex.sets), label: 'added' };
+    e.id = await histAdd(e);
+    HIST.push(e);
+  }
+  render();
+  return true;
+}
+
+// ---- Undo today: revert the exercise to its last pre-today state ----
+function todayEntryFor(exId) {
+  const today = todayKey(Date.now());
+  return HIST.find(h => h.exId === exId && h.label === 'edit' && todayKey(h.ts) === today);
+}
+
+async function undoToday(exId) {
+  const entry = todayEntryFor(exId);
+  if (!entry) return;
+  const prev = lastEntryFor(exId);
+  const back = prev ? prev.sets.map(chipText).join(', ') : 'empty';
+  if (!confirm(`Undo today's edits to ${P.exercises[exId].name}?\n\nSets go back to: ${back}`)) return;
+  P.exercises[exId].sets = prev ? clone(prev.sets) : [];
+  HIST = HIST.filter(h => h !== entry);
+  await tx('history', 'readwrite', s => s.delete(entry.id));
+  editedToday.delete(exId);
+  await kvSet('program', P);
+  render();
 }
 
 // ---- Card gestures: tap a chip = edit that set, long-press the card = action sheet ----
@@ -365,11 +515,34 @@ async function removeEx(exId) {
   render();
 }
 
+function openExEdit(exId) {
+  actCtx = exId;
+  const ex = P.exercises[exId];
+  $('exEditTitle').textContent = `Edit ${ex.name}`;
+  $('exName').value = ex.name;
+  $('exNote').value = ex.note || '';
+  $('exEditOverlay').classList.remove('hidden');
+  $('exName').focus();
+}
+
+async function saveExEdit() {
+  const ex = P.exercises[actCtx];
+  const name = $('exName').value.trim();
+  if (!ex || !name) return;
+  ex.name = name;
+  const note = $('exNote').value.trim();
+  if (note) ex.note = note; else delete ex.note;
+  await kvSet('program', P);
+  $('exEditOverlay').classList.add('hidden');
+  render();
+}
+
 function openActions(exId) {
   actCtx = exId;
   const ex = P.exercises[exId];
   $('actTitle').textContent = ex.name;
   syncMoveButtons(exId);
+  $('actUndo').style.display = todayEntryFor(exId) ? '' : 'none';
   $('actDone').textContent = DONE.map[exId] ? '↩ Un-complete' : '✓ Mark complete';
   const plan = bumpPlan(ex);
   $('actBump').style.display = plan ? '' : 'none';
@@ -476,7 +649,8 @@ async function openHist(exId) {
       ' · ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
     const head = document.createElement('div');
     head.className = 'histdate';
-    head.innerHTML = `<span>${when}</span><span class="label">${h.label === 'seed' ? 'seeded from note' : 'session'}</span>`;
+    const labelText = h.label === 'seed' ? 'seeded from note' : h.label === 'added' ? 'added' : 'session';
+    head.innerHTML = `<span>${when}</span><span class="label">${labelText}</span>`;
     e.appendChild(head);
     const chips = document.createElement('div');
     chips.className = 'chips';
@@ -704,12 +878,48 @@ function renderCal() {
   // "this week" = the calendar week containing today, regardless of the viewed month
   const now = new Date();
   const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
-  let weekN = 0;
-  for (let i = 0; i < 7; i++) {
-    const k = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + i).toDateString();
-    if (activity[k]) weekN++;
+  const weekCount = start => {
+    let n = 0;
+    for (let i = 0; i < 7; i++) {
+      const k = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i).toDateString();
+      if (activity[k]) n++;
+    }
+    return n;
+  };
+  const weekN = weekCount(weekStart);
+
+  // viewed month's total
+  let monthN = 0;
+  for (let d = 1; d <= new Date(calY, calM + 1, 0).getDate(); d++) {
+    if (activity[new Date(calY, calM, d).toDateString()]) monthN++;
   }
-  $('calWeek').textContent = `this week: ${weekN} workout${weekN === 1 ? '' : 's'}`;
+
+  // streak of consecutive weeks with at least one workout; an in-progress empty
+  // current week doesn't break it yet
+  let streak = 0;
+  let cursor = new Date(weekStart);
+  if (!weekCount(cursor)) cursor.setDate(cursor.getDate() - 7); else { streak = 1; cursor.setDate(cursor.getDate() - 7); }
+  for (let i = 0; i < 260 && weekCount(cursor); i++) { streak++; cursor.setDate(cursor.getDate() - 7); }
+
+  $('calWeek').textContent =
+    `this week: ${weekN} · this month: ${monthN} · streak: ${streak} wk${streak === 1 ? '' : 's'}`;
+
+  // days since each training day was last touched
+  const sinceBits = [];
+  for (const day of P.days) {
+    let best = -1;
+    for (const [key, types] of Object.entries(activity)) {
+      if (!types[day.id]) continue;
+      const t = new Date(key).getTime();
+      if (t > best) best = t;
+    }
+    const label = best < 0 ? '—' : (() => {
+      const days = Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()) - new Date(best)) / 864e5);
+      return days === 0 ? 'today' : `${days}d`;
+    })();
+    sinceBits.push(`${calChip(day.id)}<span class="sincelab">${label}</span>`);
+  }
+  $('calSince').innerHTML = sinceBits.join('');
 
   $('calDow').innerHTML = ['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(d => `<span>${d}</span>`).join('');
 
@@ -811,8 +1021,19 @@ $('actDone').onclick = async () => { const id = actCtx; closeActions(); await to
 $('actBump').onclick = async () => { const id = actCtx; closeActions(); await applyBump(id); };
 $('actUp').onclick = () => moveEx(actCtx, -1);   // sheet stays open for repeated taps
 $('actDown').onclick = () => moveEx(actCtx, +1);
+$('actUndo').onclick = async () => { const id = actCtx; closeActions(); await undoToday(id); };
+$('actEdit').onclick = () => { const id = actCtx; closeActions(); openExEdit(id); };
 $('actRemove').onclick = async () => { const id = actCtx; closeActions(); await removeEx(id); };
 $('actCancel').onclick = closeActions;
+$('addCancel').onclick = () => $('addOverlay').classList.add('hidden');
+$('addSave').onclick = async () => {
+  if (await addExercise($('addLine').value)) $('addOverlay').classList.add('hidden');
+};
+$('addLine').onkeydown = e => { if (e.key === 'Enter') $('addSave').click(); };
+$('addOverlay').onclick = e => { if (e.target === $('addOverlay')) $('addOverlay').classList.add('hidden'); };
+$('exEditCancel').onclick = () => $('exEditOverlay').classList.add('hidden');
+$('exEditSave').onclick = saveExEdit;
+$('exEditOverlay').onclick = e => { if (e.target === $('exEditOverlay')) $('exEditOverlay').classList.add('hidden'); };
 $('actOverlay').onclick = e => { if (e.target === $('actOverlay') && Date.now() - actOpenedAt > 400) closeActions(); };
 $('histOverlay').onclick = e => { if (e.target === $('histOverlay')) $('histOverlay').classList.add('hidden'); };
 $('eraseAll').onclick = async () => {
